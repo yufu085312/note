@@ -29,12 +29,30 @@ def _truncate(text: str, limit: int) -> str:
     return text[: limit - 1].rstrip() + "…"
 
 
-_SYSTEM = (
-    "あなたはプロのブロガーです。与えられたニュース記事の内容をもとに、"
-    "note読者向けの日本語のオリジナル記事を書きます。"
-    "元記事を丸写しせず、要点を咀嚼して自分の言葉で再構成・解説してください。"
-    "事実に基づき、誇張や捏造はしないこと。"
-)
+_SYSTEM = """あなたは月間数万PVを集める人気ブロガーです。時事ニュースを分かりやすく
+解説することで知られています。ニュースを元に、note読者が「読んでよかった」と思う
+質の高いオリジナル記事を書きます。話題はテックに限らず、政治・経済・社会・国際・
+科学・スポーツなど何でも扱います。
+
+# 守ること
+- 元記事の丸写しは厳禁。事実(数字・固有名詞・出来事)は正確に踏まえつつ、要点を咀嚼し、
+  背景・意味・読者にとっての価値を自分の言葉で解説する。
+- 事実に基づき、誇張・断定のしすぎ・捏造をしない。推測は「〜と考えられます」と明示。
+- 専門用語は噛み砕く。具体例やたとえを使い、初心者にも分かるように。
+
+# 文章のスタイル
+- 親しみやすく、しかし中身のある「です・ます」調。冗長な前置きや決まり文句は避ける。
+- 単なる要約ではなく、「なぜ重要か」「読者にどう関係するか」という視点を必ず入れる。
+
+# 構成(この流れで書く)
+1. リード: 読者を引き込む導入(2〜3文)。何の話で、なぜ面白いのかを提示。
+2. 本論: 「## 見出し」で2〜4個のセクションに分け、各セクションで背景・詳細・意義を解説。
+3. まとめ: 要点の再確認と、読者への一言(問いかけや今後の展望)。
+
+# noteの記法(本文にそのまま書いてよい)
+- セクション見出しは行頭に「## 」を付ける(例: ## そもそも何が変わったのか)。
+- 段落と段落の間は空行で区切る。
+- 箇条書き記号(「- 」など)や強調記号は使わない。要点は文章で表現する。"""
 
 
 def _generate_with_ai(entry: Entry, source_text: str, cfg: Config) -> Article:
@@ -44,9 +62,18 @@ def _generate_with_ai(entry: Entry, source_text: str, cfg: Config) -> Article:
     from pydantic import BaseModel, Field
 
     class GeneratedArticle(BaseModel):
-        title: str = Field(description="読者の興味を引く記事タイトル")
-        body: str = Field(description="段落ごとに改行したプレーンテキスト本文。見出し記号は使わない")
-        tags: list[str] = Field(description="noteのハッシュタグを2〜4個", default_factory=list)
+        title: str = Field(
+            description="30字前後の具体的で魅力的なタイトル。煽りすぎず内容を的確に表す"
+        )
+        body: str = Field(
+            description=(
+                "記事本文。リード→「## 見出し」で区切った本論2〜4節→まとめ、の構成。"
+                "段落は空行で区切る。見出しは行頭『## 』。箇条書き記号や強調記号は使わない"
+            )
+        )
+        tags: list[str] = Field(
+            description="内容に即したnoteのハッシュタグを3〜5個", default_factory=list
+        )
 
     if not cfg.gemini_api_key:
         raise RuntimeError(
@@ -57,13 +84,16 @@ def _generate_with_ai(entry: Entry, source_text: str, cfg: Config) -> Article:
     client = genai.Client(api_key=cfg.gemini_api_key)
     model = cfg.formatter.get("model", "gemini-2.5-flash")
     target_chars = int(cfg.formatter.get("max_body_chars", 4000))
+    max_tokens = int(cfg.formatter.get("max_output_tokens", 8192))
 
     prompt = (
-        f"以下のニュースをもとに、note向けのオリジナル記事を書いてください。\n"
-        f"本文は約{target_chars}文字以内、段落ごとに改行したプレーンテキストで。\n\n"
-        f"元記事タイトル: {entry.title}\n"
-        f"元記事URL: {entry.link}\n\n"
-        f"元記事の内容:\n{source_text}"
+        "以下のニュースを元に、上記の役割・構成・スタイルに従って"
+        "note向けのオリジナル記事を書いてください。\n"
+        f"本文の分量は{max(1200, target_chars - 800)}〜{target_chars}文字程度を目安に、"
+        "内容の薄い水増しはせず、読み応えのある密度で書いてください。\n\n"
+        f"# 元記事タイトル\n{entry.title}\n\n"
+        f"# 元記事URL\n{entry.link}\n\n"
+        f"# 元記事の内容\n{source_text}"
     )
 
     resp = client.models.generate_content(
@@ -73,6 +103,7 @@ def _generate_with_ai(entry: Entry, source_text: str, cfg: Config) -> Article:
             system_instruction=_SYSTEM,
             response_mime_type="application/json",
             response_schema=GeneratedArticle,
+            max_output_tokens=max_tokens,
             # 構造化出力のみ利用。AFC(自動関数呼び出し)は使わないので無効化し警告を抑止
             automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
         ),

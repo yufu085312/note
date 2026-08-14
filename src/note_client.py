@@ -94,14 +94,27 @@ class NoteClient:
         title_el.click()
         title_el.fill(article.title)
 
-        # 本文: contenteditable に段落ごとに入力
+        # 本文入力。noteの「## 」見出し変換は「直前に空段落があること」で発動するため、
+        # 見出し前の空行は残す。一方で見出し直後の空行は間延びの原因になるのでスキップする。
         body_el = page.wait_for_selector(self.sel["body"], timeout=30000)
         body_el.click()
-        for i, para in enumerate(article.body.split("\n")):
-            if i > 0:
+        first = True
+        prev_heading = False
+        prev_divider = False
+        for raw in article.body.split("\n"):
+            is_blank = not raw.strip()
+            # 見出しの直後の空行だけは飛ばす（見出しと本文の間の余分な隙間を消す）
+            if is_blank and prev_heading:
+                prev_heading = False
+                continue
+            # 区切り線(---)変換後はnoteが自動で次の空行に移動するのでEnterを打たない
+            if not first and not prev_divider:
                 page.keyboard.press("Enter")
-            if para:
-                page.keyboard.type(para, delay=8)
+            first = False
+            if not is_blank:
+                page.keyboard.type(raw, delay=8)
+            prev_heading = raw.lstrip().startswith("##")
+            prev_divider = raw.strip() == "---"
 
         time.sleep(1)  # 自動保存の反映待ち
 
