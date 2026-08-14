@@ -1,0 +1,17 @@
+{
+  // この .venv を常に使う（Pylanceが標準ライブラリ/依存を解決できるようになる）
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+
+  // 個人用スクリプトなのでPylanceの厳格な型チェックは無効化（赤線ノイズを抑制）
+  "python.analysis.typeCheckingMode": "off",
+
+  // Mypy拡張のノイズを抑制（stub不足や属性=None初期化などは実行に無関係）
+  "mypy-type-checker.args": [
+    "--ignore-missing-imports",
+    "--disable-error-code=assignment",
+    "--disable-error-code=union-attr",
+    "--disable-error-code=var-annotated",
+    "--disable-error-code=import-untyped",
+    "--disable-error-code=import-not-found"
+  ]
+}

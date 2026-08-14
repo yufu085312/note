@@ -9,7 +9,6 @@ note には公式APIが無いため、保存済みセッション(storage_state.
 from __future__ import annotations
 
 import time
-from pathlib import Path
 
 from playwright.sync_api import Page, TimeoutError as PWTimeout, sync_playwright
 

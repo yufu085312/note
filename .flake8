@@ -1,0 +1,7 @@
+[flake8]
+max-line-length = 120
+# E402: sys.path 調整後の import（save_session.py の意図的な書き方）
+# E501: 日本語コメントで行が伸びやすいため無効化
+# E203/W503: black と非互換な規則
+extend-ignore = E402, E501, E203, W503
+exclude = .venv,.git,__pycache__,.mypy_cache
