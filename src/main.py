@@ -36,9 +36,12 @@ def run(config_path: str | None, dry_run: bool, headless: bool) -> int:
         print("\n[dry-run] 実際の投稿は行いませんでした。")
         return 0
 
+    failures = 0
     with NoteClient(cfg, headless=headless) as client:
         if not client.is_logged_in():
-            print("エラー: ログインセッションが無効です。save_session.py を再実行してください。",
+            # セッション期限切れ等。ジョブを失敗(赤)にして通知が届くようにする。
+            print("エラー: ログインセッションが無効です（期限切れの可能性）。"
+                  "save_session.py を再実行してセッションを更新してください。",
                   file=sys.stderr)
             return 1
 
@@ -49,9 +52,14 @@ def run(config_path: str | None, dry_run: bool, headless: bool) -> int:
                 url = client.post(art)
                 state.mark(e.id)
                 print(f"  完了: {url}")
-            except Exception as ex:  # 1件失敗しても他を続ける
+            except Exception as ex:  # 1件失敗しても他は続けるが、最後に失敗扱いにする
+                failures += 1
                 print(f"  失敗: {ex}", file=sys.stderr)
 
+    # 1件でも投稿に失敗したらジョブを失敗(赤)にする（成功偽装を防ぐ）
+    if failures:
+        print(f"エラー: {failures}件の投稿に失敗しました。", file=sys.stderr)
+        return 1
     return 0
 
 
