@@ -30,8 +30,6 @@ class Config:
     note: dict[str, Any]
 
     # env
-    note_email: str | None
-    note_password: str | None
     gemini_api_key: str | None
 
     @property
@@ -64,7 +62,5 @@ def load_config(path: str | Path | None = None) -> Config:
         source_template=raw.get("source_template", "\n\n---\n出典: [{title}]({link})"),
         formatter=raw.get("formatter", {}),
         note=raw.get("note", {}),
-        note_email=os.getenv("NOTE_EMAIL"),
-        note_password=os.getenv("NOTE_PASSWORD"),
         gemini_api_key=os.getenv("GEMINI_API_KEY"),
     )
