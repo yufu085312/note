@@ -36,8 +36,21 @@ class NoteClient:
                 "先に `python scripts/save_session.py` を実行してログインしてください。"
             )
         self._pw = sync_playwright().start()
-        self._browser = self._pw.chromium.launch(headless=self.headless)
-        self._context = self._browser.new_context(storage_state=str(state))
+        self._browser = self._pw.chromium.launch(
+            headless=self.headless,
+            args=["--disable-blink-features=AutomationControlled"],
+        )
+        # 実ブラウザらしく見せる（anti-bot対策・描画安定化）
+        self._context = self._browser.new_context(
+            storage_state=str(state),
+            viewport={"width": 1280, "height": 900},
+            locale="ja-JP",
+            user_agent=(
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/124.0.0.0 Safari/537.36"
+            ),
+        )
         self.page = self._context.new_page()
         return self
 
@@ -70,14 +83,20 @@ class NoteClient:
         page = self.page
         page.goto(self.cfg.note.get("editor_url", "https://note.com/notes/new"),
                   wait_until="domcontentloaded")
+        # SPAのエディタ描画完了を待つ（ネットワーク静止 + 保険のsleep）
+        try:
+            page.wait_for_load_state("networkidle", timeout=15000)
+        except PWTimeout:
+            pass
+        time.sleep(2)
 
-        # タイトル
-        title_el = page.wait_for_selector(self.sel["title"], timeout=15000)
+        # タイトル（CI/headlessでの描画遅延に備えて長めのタイムアウト）
+        title_el = page.wait_for_selector(self.sel["title"], timeout=30000)
         title_el.click()
         title_el.fill(article.title)
 
         # 本文: contenteditable に段落ごとに入力
-        body_el = page.wait_for_selector(self.sel["body"], timeout=15000)
+        body_el = page.wait_for_selector(self.sel["body"], timeout=30000)
         body_el.click()
         for i, para in enumerate(article.body.split("\n")):
             if i > 0:

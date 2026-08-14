@@ -19,6 +19,7 @@ jobs:
         run: |
           pip install -r requirements.txt
           python -m playwright install --with-deps chromium
+          sudo apt-get install -y xvfb
 
       # 投稿済み状態をキャッシュ（実行間で二重投稿を防ぐ）
       - name: Restore posted state
@@ -33,10 +34,12 @@ jobs:
       - name: Restore login session
         run: echo "${{ secrets.STORAGE_STATE_JSON }}" | base64 -d > storage_state.json
 
+      # 仮想ディスプレイ(xvfb)上で実ブラウザ表示モード(--headed)として実行。
+      # note のヘッドレス検知を回避し、エディタを確実に描画させる。
       - name: Run
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        run: python -m src.main
+        run: xvfb-run -a python -m src.main --headed
 
       # 更新した投稿済み状態を保存
       - name: Save posted state
