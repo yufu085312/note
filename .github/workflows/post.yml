@@ -1,0 +1,47 @@
+name: note auto post
+
+on:
+  schedule:
+    - cron: "0 0 * * *"   # 毎日 09:00 JST (UTC 00:00)
+  workflow_dispatch:        # 手動実行も可能
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install deps
+        run: |
+          pip install -r requirements.txt
+          python -m playwright install --with-deps chromium
+
+      # 投稿済み状態をキャッシュ（実行間で二重投稿を防ぐ）
+      - name: Restore posted state
+        uses: actions/cache@v4
+        with:
+          path: data/posted.json
+          key: note-posted-${{ github.run_id }}
+          restore-keys: note-posted-
+
+      # storage_state.json（ログインセッション）だけ Secret から復元。
+      # config.yaml はリポジトリにコミット済みのものをそのまま使う。
+      - name: Restore login session
+        run: echo "${{ secrets.STORAGE_STATE_JSON }}" | base64 -d > storage_state.json
+
+      - name: Run
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: python -m src.main
+
+      # 更新した投稿済み状態を保存
+      - name: Save posted state
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: data/posted.json
+          key: note-posted-${{ github.run_id }}

@@ -1,0 +1,39 @@
+# ===== RSS フィード設定 =====
+feeds:
+  - url: "https://www.publickey1.jp/atom.xml"
+    # このフィード由来の記事に付けるタグ（note のハッシュタグ）
+    tags: ["自動投稿", "テック"]
+
+# 1回の実行で投稿する最大件数（レート制限・事故防止）
+max_posts_per_run: 1
+
+# 公開せず「下書き保存」までにする場合は true（最初は true 推奨）
+draft_only: true
+
+# 本文末尾に付ける引用元表記
+append_source: true
+source_template: "\n\n---\n出典: [{title}]({link})"
+
+# ===== 整形設定 =====
+formatter:
+  # true: Claudeでトピック抽出しオリジナル記事を生成 / false: RSS要約をそのまま
+  use_ai: true
+  # 元記事URLから本文をフル取得してAIに渡すか
+  fetch_full_content: true
+  # Geminiモデル（無料枠）。gemini-2.5-flash 推奨
+  model: "gemini-2.5-flash"
+  # 本文の目安・最大文字数
+  max_body_chars: 4000
+
+# ===== note エディタのセレクタ =====
+# 実サイトの変更で壊れやすい部分。save_session.py で確認・調整可能。
+note:
+  login_url: "https://note.com/login"
+  editor_url: "https://note.com/notes/new"
+  storage_state: "storage_state.json"
+  selectors:
+    title: "textarea[placeholder*='タイトル'], input[placeholder*='タイトル']"
+    body: "div[contenteditable='true']"
+    publish_button: "button:has-text('公開')"
+    publish_confirm: "button:has-text('公開する'), button:has-text('投稿')"
+    save_draft_button: "button:has-text('下書き保存')"

@@ -1,0 +1,19 @@
+# secrets / auth
+.env
+storage_state.json
+
+# state
+data/posted.json
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# playwright
+test-results/
+playwright-report/
+
+# os
+.DS_Store
