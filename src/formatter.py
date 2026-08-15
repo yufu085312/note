@@ -46,7 +46,7 @@ _SYSTEM = """あなたは月間数万PVを集める人気ブロガーです。�
 
 # 構成(この流れで書く)
 1. リード: 読者を引き込む導入(2〜3文)。何の話で、なぜ面白いのかを提示。
-2. 本論: 「## 見出し」で2〜4個のセクションに分け、各セクションで背景・詳細・意義を解説。
+2. 本論: 「## 見出し」で2〜3個のセクションに分け、各セクションで背景・詳細・意義を解説。
 3. まとめ: 要点の再確認と、読者への一言(問いかけや今後の展望)。
 
 # noteの記法(本文にそのまま書いてよい)
@@ -86,11 +86,23 @@ def _generate_with_ai(entry: Entry, source_text: str, cfg: Config) -> Article:
     target_chars = int(cfg.formatter.get("max_body_chars", 4000))
     max_tokens = int(cfg.formatter.get("max_output_tokens", 8192))
 
+    image_rule = ""
+    if cfg.formatter.get("image_placeholders", True):
+        image_rule = (
+            "\n# 画像の目印\n"
+            "本文中の区切りの良い位置(リード直後や各セクションの冒頭など)に、"
+            "後から手動で画像を挿入するための目印を2〜3箇所入れてください。\n"
+            "形式は必ず、その位置に合う画像の内容を説明した1行"
+            "『【画像候補】〜〜〜』とすること(例: 【画像候補】冠水した市街地の道路のイメージ)。\n"
+            "実在の報道写真の指定ではなく、内容に合う一般的な画像イメージを説明する。\n"
+        )
+
     prompt = (
         "以下のニュースを元に、上記の役割・構成・スタイルに従って"
         "note向けのオリジナル記事を書いてください。\n"
-        f"本文の分量は{max(1200, target_chars - 800)}〜{target_chars}文字程度を目安に、"
-        "内容の薄い水増しはせず、読み応えのある密度で書いてください。\n\n"
+        f"本文の分量は{max(1200, target_chars - 700)}〜{target_chars}文字程度を目安に、"
+        "内容の薄い水増しはせず、簡潔で読み応えのある密度で書いてください。\n"
+        f"{image_rule}\n"
         f"# 元記事タイトル\n{entry.title}\n\n"
         f"# 元記事URL\n{entry.link}\n\n"
         f"# 元記事の内容\n{source_text}"

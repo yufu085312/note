@@ -25,8 +25,10 @@ formatter:
   fetch_full_content: true
   # Geminiモデル（無料枠）。gemini-2.5-flash 推奨
   model: "gemini-2.5-flash"
-  # 本文の目安・最大文字数
-  max_body_chars: 4000
+  # 本文の目安・最大文字数（noteで読まれやすい1500〜2500字に合わせる）
+  max_body_chars: 2500
+  # 本文中に画像の挿入位置の目印（【画像候補】…）を入れるか
+  image_placeholders: true
 
 # ===== note エディタのセレクタ =====
 # 実サイトの変更で壊れやすい部分。save_session.py で確認・調整可能。

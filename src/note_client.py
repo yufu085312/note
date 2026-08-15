@@ -113,6 +113,11 @@ class NoteClient:
             first = False
             if not is_blank:
                 page.keyboard.type(raw, delay=8)
+                # URL行は末尾にスペースを送って「インラインのリンク」に変換させる。
+                # 単独URL行でEnterを送るとブックマーク埋め込み扱いになり、
+                # 埋め込み生成に失敗するとURLごと消えてしまうため。
+                if raw.strip().startswith(("http://", "https://")):
+                    page.keyboard.press("Space")
             prev_heading = raw.lstrip().startswith("##")
             prev_divider = raw.strip() == "---"
 
