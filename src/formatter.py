@@ -10,6 +10,7 @@ use_ai=false の場合:
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 
 from .config import Config
@@ -24,15 +25,52 @@ class Article:
 
 
 def _truncate(text: str, limit: int) -> str:
+    """安全網としての切り詰め。上限を超える場合でも、見出しや文の途中で切らず、
+    直前の段落の切れ目(空行)で切って記事が不自然に途切れないようにする。"""
     if len(text) <= limit:
         return text
-    return text[: limit - 1].rstrip() + "…"
+    cut = text[:limit]
+    idx = cut.rfind("\n\n")  # 直前の段落区切り
+    if idx > limit * 0.5:
+        return cut[:idx].rstrip()
+    return cut.rstrip() + "…"
 
 
-_SYSTEM = """あなたは月間数万PVを集める人気ブロガーです。時事ニュースを分かりやすく
-解説することで知られています。ニュースを元に、note読者が「読んでよかった」と思う
-質の高いオリジナル記事を書きます。話題はテックに限らず、政治・経済・社会・国際・
-科学・スポーツなど何でも扱います。
+def _clean_url(url: str) -> str:
+    """出典表示用にURLからクエリ(?utm_...等)とフラグメントを除去して短くする。"""
+    for sep in ("?", "#"):
+        url = url.split(sep, 1)[0]
+    return url
+
+
+def _sanitize_body(body: str) -> str:
+    """note非対応のMarkdown装飾を整える。
+    - 行全体が太字(**...**)だけの行 → 見出し(## ...)に変換（「〜選」の項目タイトル対策）
+    - 行内の太字(**...** / __...__)記号は除去してテキストだけ残す
+    """
+    lines: list[str] = []
+    for line in body.split("\n"):
+        s = line.strip()
+        m = re.fullmatch(r"\*\*(.+?)\*\*", s) or re.fullmatch(r"__(.+?)__", s)
+        if m:
+            lines.append("## " + m.group(1).strip())
+            continue
+        line = re.sub(r"\*\*(.+?)\*\*", r"\1", line)
+        line = re.sub(r"__(.+?)__", r"\1", line)
+        lines.append(line)
+    return "\n".join(lines)
+
+
+_SYSTEM = """あなたは月間数万PVを集める人気ブロガーです。ChatGPTやMidjourney等の
+生成AIを、エンジニアでない普通の人にも分かりやすく解説することで知られています。
+与えられたAI関連の記事を元に、note読者が「明日から使ってみよう」と思える
+実践的なオリジナル記事を書きます。
+
+# 記事の狙い
+- 専門用語や技術詳細に深入りせず、非エンジニアの読者が実生活・仕事で使える
+  「具体的な活用術」に落とし込む。
+- 特に「日常や仕事の時短」「副業・収入アップへの応用」「面倒な作業の効率化」の
+  視点を意識し、読者が真似できる具体例(プロンプト例や手順)を入れる。
 
 # 守ること
 - 元記事の丸写しは厳禁。事実(数字・固有名詞・出来事)は正確に踏まえつつ、要点を咀嚼し、
@@ -53,8 +91,11 @@ _SYSTEM = """あなたは月間数万PVを集める人気ブロガーです。�
 
 # noteの記法(本文にそのまま書いてよい)
 - セクション見出しは行頭に「## 」を付ける(例: ## そもそも何が変わったのか)。
+- 「〜選」などの番号付き項目の見出しも、必ず行頭に「## 」を付ける
+  (例: ## 1. 面倒なリサーチを自動化する)。
 - 段落と段落の間は空行で区切る。
-- 箇条書き記号(「- 」など)や強調記号は使わない。要点は文章で表現する。"""
+- 太字(**...**)・下線(__...__)・箇条書き記号(- や *)などのMarkdown装飾は一切使わない。
+  強調したい語も記号で囲まず、そのまま書く。見出しに使えるのは「## 」だけ。"""
 
 
 def _generate_with_ai(entry: Entry, source_text: str, cfg: Config) -> Article:
@@ -108,6 +149,8 @@ def _generate_with_ai(entry: Entry, source_text: str, cfg: Config) -> Article:
         "note向けのオリジナル記事を書いてください。\n"
         f"本文の分量は{max(1200, target_chars - 700)}〜{target_chars}文字程度を目安に、"
         "内容の薄い水増しはせず、簡潔で読み応えのある密度で書いてください。\n"
+        "重要: 途中で終わらせず、必ず最後の『まとめ』まで書ききって記事を完結させること。"
+        "項目数が多くなりそうな場合は数を絞ってでも、文字数の目安に収めて完結させる。\n"
         f"{image_rule}\n"
         f"# 元記事タイトル\n{entry.title}\n\n"
         f"# 元記事URL\n{entry.link}\n\n"
@@ -130,11 +173,18 @@ def _generate_with_ai(entry: Entry, source_text: str, cfg: Config) -> Article:
 
     # フィード設定のタグとAI提案タグをマージ（重複除去・順序維持）
     tags = list(dict.fromkeys([*entry.tags, *(gen.tags or [])]))
-    return Article(title=gen.title.strip(), body=gen.body.strip(), tags=tags)
+    return Article(
+        title=gen.title.strip(),
+        body=_sanitize_body(gen.body.strip()),
+        tags=tags,
+    )
 
 
 def build_article(entry: Entry, cfg: Config) -> Article:
-    max_chars = int(cfg.formatter.get("max_body_chars", 4000))
+    target_chars = int(cfg.formatter.get("max_body_chars", 2500))
+    # 目安(target)を多少超えても記事を完結させたいので、切り詰めは余裕を持たせた
+    # ハード上限でのみ発動させる（通常の完成記事はそのまま通す）。
+    hard_limit = target_chars + 1200
 
     if cfg.formatter.get("use_ai"):
         # 元記事本文をフル取得（失敗時はRSS要約でフォールバック）
@@ -147,9 +197,11 @@ def build_article(entry: Entry, cfg: Config) -> Article:
     else:
         article = Article(title=entry.title, body=entry.summary, tags=list(entry.tags))
 
-    article.body = _truncate(article.body, max_chars)
+    article.body = _truncate(article.body, hard_limit)
 
     if cfg.append_source and entry.link:
-        article.body += cfg.source_template.format(title=entry.title, link=entry.link)
+        article.body += cfg.source_template.format(
+            title=entry.title, link=_clean_url(entry.link)
+        )
 
     return article

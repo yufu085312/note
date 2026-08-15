@@ -1,11 +1,11 @@
 # ===== RSS フィード設定 =====
 feeds:
-  # NHKニュース 主要ニュース（政治・経済・社会・国際・科学など全般）
-  - url: "https://www.nhk.or.jp/rss/news/cat0.xml"
-    tags: ["時事"]
-  # livedoorニュース 主要（芸能・社会・ITなど幅広い話題）
-  - url: "https://news.livedoor.com/topics/rss/top.xml"
-    tags: ["話題"]
+  # AINOW（AI活用・ビジネス寄りの解説/ノウハウ記事）
+  - url: "https://ainow.ai/feed/"
+    tags: ["AI活用", "ChatGPT"]
+  # ITmedia AI+（生成AIニュース全般）
+  - url: "https://rss.itmedia.co.jp/rss/2.0/aiplus.xml"
+    tags: ["生成AI"]
 
 # 1回の実行で投稿する最大件数（レート制限・事故防止）
 max_posts_per_run: 1
