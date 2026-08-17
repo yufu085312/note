@@ -1,11 +1,12 @@
 # ===== RSS フィード設定 =====
 feeds:
   # AINOW（AI活用・ビジネス寄りの解説/ノウハウ記事）
+  # tags は固定ハッシュタグ。空にすると記事内容に応じてAIが生成したタグのみが付く。
   - url: "https://ainow.ai/feed/"
-    tags: ["AI活用", "ChatGPT"]
+    tags: []
   # ITmedia AI+（生成AIニュース全般）
   - url: "https://rss.itmedia.co.jp/rss/2.0/aiplus.xml"
-    tags: ["生成AI"]
+    tags: []
 
 # 1回の実行で投稿する最大件数（レート制限・事故防止）
 max_posts_per_run: 1

@@ -39,6 +39,7 @@ class Entry:
     link: str
     summary: str     # プレーンテキスト本文
     tags: list[str]  # フィード設定由来のタグ
+    source: str      # 取得元フィードのURL（発行元の交互選択に使う）
 
 
 def _stable_id(entry: feedparser.FeedParserDict) -> str:
@@ -88,6 +89,7 @@ def fetch_entries(feed_cfg: FeedConfig) -> list[Entry]:
                 link=e.get("link", ""),
                 summary=_html_to_text(body_html),
                 tags=list(feed_cfg.tags),
+                source=feed_cfg.url,
             )
         )
     return entries

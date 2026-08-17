@@ -4,11 +4,50 @@ from __future__ import annotations
 import argparse
 import sys
 
+from .config import Config
 from .config import load_config
-from .feed import fetch_all
+from .feed import Entry, fetch_all
 from .formatter import build_article
 from .note_client import NoteClient
 from .state import PostedState
+
+
+def select_targets(
+    new_entries: list[Entry], cfg: Config, last_source: str | None
+) -> list[Entry]:
+    """発行元(フィード)を交互に選ぶラウンドロビンで投稿対象を決める。
+    直近に投稿した発行元(last_source)の「次」の発行元から拾い始めるので、
+    実行のたびに AINOW → ITmedia → AINOW … と切り替わる。"""
+    # 発行元ごとに、フィード内の順序を保ったままグループ化
+    by_source: dict[str, list[Entry]] = {}
+    for e in new_entries:
+        by_source.setdefault(e.source, []).append(e)
+
+    # config.yaml のフィード順を基準にしつつ、新規記事がある発行元だけ残す
+    order = [f.url for f in cfg.feeds if f.url in by_source]
+    if not order:
+        return []
+
+    # 直近に使った発行元の「次」から始まるように回転させる
+    if last_source in order:
+        i = order.index(last_source)
+        order = order[i + 1:] + order[: i + 1]
+
+    targets: list[Entry] = []
+    cursor = {u: 0 for u in order}
+    while len(targets) < cfg.max_posts_per_run:
+        progressed = False
+        for u in order:
+            if len(targets) >= cfg.max_posts_per_run:
+                break
+            lst = by_source[u]
+            if cursor[u] < len(lst):
+                targets.append(lst[cursor[u]])
+                cursor[u] += 1
+                progressed = True
+        if not progressed:  # すべての発行元を拾い切った
+            break
+    return targets
 
 
 def run(config_path: str | None, dry_run: bool, headless: bool) -> int:
@@ -23,7 +62,7 @@ def run(config_path: str | None, dry_run: bool, headless: bool) -> int:
         print("新規記事なし。終了します。")
         return 0
 
-    targets = new_entries[: cfg.max_posts_per_run]
+    targets = select_targets(new_entries, cfg, state.last_source)
     print(f"今回の投稿対象: {len(targets)}件 (draft_only={cfg.draft_only})")
 
     if dry_run:
@@ -51,6 +90,7 @@ def run(config_path: str | None, dry_run: bool, headless: bool) -> int:
             try:
                 url = client.post(art)
                 state.mark(e.id)
+                state.set_last_source(e.source)  # 次回は別の発行元から拾う
                 print(f"  完了: {url}")
             except Exception as ex:  # 1件失敗しても他は続けるが、最後に失敗扱いにする
                 failures += 1
