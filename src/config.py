@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parent.parent
 class FeedConfig:
     url: str
     tags: list[str] = field(default_factory=list)
+    weight: int = 1  # 選ばれる頻度の重み。大きいほど多く投稿される（例: 2なら他の2倍）
 
 
 @dataclass
@@ -49,7 +50,11 @@ def load_config(path: str | Path | None = None) -> Config:
         raw = yaml.safe_load(f) or {}
 
     feeds = [
-        FeedConfig(url=f["url"], tags=f.get("tags", []))
+        FeedConfig(
+            url=f["url"],
+            tags=f.get("tags", []),
+            weight=max(1, int(f.get("weight", 1))),
+        )
         for f in raw.get("feeds", [])
     ]
 

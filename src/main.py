@@ -4,50 +4,73 @@ from __future__ import annotations
 import argparse
 import sys
 
-from .config import Config
-from .config import load_config
+from .config import Config, FeedConfig, load_config
 from .feed import Entry, fetch_all
 from .formatter import build_article
 from .note_client import NoteClient
 from .state import PostedState
 
 
+def weighted_cycle(feeds: list[FeedConfig]) -> list[str]:
+    """weight に応じて発行元(URL)を均等に散らした1周期分の並びを作る。
+    例: AINOW(weight=2), ITmedia(weight=1) → [AINOW, ITmedia, AINOW]
+    （2:1 の比率で、ITmedia が間に挟まるよう均等配置される）。"""
+    slots: list[tuple[float, int, str]] = []
+    for idx, f in enumerate(feeds):
+        w = max(1, f.weight)
+        for k in range(w):
+            # 各出現を [0,1) 上に均等配置し、全フィードをまとめて並べ替える
+            slots.append(((k + 0.5) / w, idx, f.url))
+    slots.sort()
+    return [url for _, _, url in slots]
+
+
 def select_targets(
-    new_entries: list[Entry], cfg: Config, last_source: str | None
-) -> list[Entry]:
-    """発行元(フィード)を交互に選ぶラウンドロビンで投稿対象を決める。
-    直近に投稿した発行元(last_source)の「次」の発行元から拾い始めるので、
-    実行のたびに AINOW → ITmedia → AINOW … と切り替わる。"""
+    new_entries: list[Entry], cfg: Config, seq: list[str], rotation: int
+) -> tuple[list[Entry], int]:
+    """重み付きローテーション(seq)の rotation 位置から発行元を選び、
+    投稿対象と「次回の rotation 位置」を返す。
+    目当ての発行元に新規記事が無ければ、seq の次の発行元へ順に回す。"""
     # 発行元ごとに、フィード内の順序を保ったままグループ化
     by_source: dict[str, list[Entry]] = {}
     for e in new_entries:
         by_source.setdefault(e.source, []).append(e)
 
-    # config.yaml のフィード順を基準にしつつ、新規記事がある発行元だけ残す
-    order = [f.url for f in cfg.feeds if f.url in by_source]
-    if not order:
-        return []
+    if not seq or not by_source:
+        return [], rotation
 
-    # 直近に使った発行元の「次」から始まるように回転させる
-    if last_source in order:
-        i = order.index(last_source)
-        order = order[i + 1:] + order[: i + 1]
-
+    n = len(seq)
+    used: dict[str, int] = {u: 0 for u in by_source}
     targets: list[Entry] = []
-    cursor = {u: 0 for u in order}
+    rot = rotation % n
+
     while len(targets) < cfg.max_posts_per_run:
-        progressed = False
-        for u in order:
-            if len(targets) >= cfg.max_posts_per_run:
+        picked: str | None = None
+        for step in range(n):  # rot から始めて、記事がある発行元を探す
+            u = seq[(rot + step) % n]
+            if u in by_source and used[u] < len(by_source[u]):
+                picked = u
+                rot = (rot + step + 1) % n  # 次はこの発行元の次から
                 break
-            lst = by_source[u]
-            if cursor[u] < len(lst):
-                targets.append(lst[cursor[u]])
-                cursor[u] += 1
-                progressed = True
-        if not progressed:  # すべての発行元を拾い切った
+        if picked is None:  # どの発行元も拾い切った
             break
-    return targets
+        targets.append(by_source[picked][used[picked]])
+        used[picked] += 1
+
+    return targets, rot
+
+
+def _advance_past(seq: list[str], rotation: int, source: str) -> int:
+    """seq 上で rotation 位置から見て最初に source が現れる位置の「次」を返す。
+    投稿が成功した分だけ rotation を進めるために使う。"""
+    n = len(seq)
+    if n == 0:
+        return rotation
+    for step in range(n):
+        i = (rotation + step) % n
+        if seq[i] == source:
+            return (i + 1) % n
+    return rotation % n
 
 
 def run(config_path: str | None, dry_run: bool, headless: bool) -> int:
@@ -62,7 +85,8 @@ def run(config_path: str | None, dry_run: bool, headless: bool) -> int:
         print("新規記事なし。終了します。")
         return 0
 
-    targets = select_targets(new_entries, cfg, state.last_source)
+    seq = weighted_cycle(cfg.feeds)
+    targets, _ = select_targets(new_entries, cfg, seq, state.rotation)
     print(f"今回の投稿対象: {len(targets)}件 (draft_only={cfg.draft_only})")
 
     if dry_run:
@@ -84,13 +108,15 @@ def run(config_path: str | None, dry_run: bool, headless: bool) -> int:
                   file=sys.stderr)
             return 1
 
+        rot = state.rotation
         for e in targets:
             art = build_article(e, cfg)
             print(f"投稿中: {art.title}")
             try:
                 url = client.post(art)
                 state.mark(e.id)
-                state.set_last_source(e.source)  # 次回は別の発行元から拾う
+                rot = _advance_past(seq, rot, e.source)  # 成功分だけ次へ進める
+                state.set_rotation(rot)
                 print(f"  完了: {url}")
             except Exception as ex:  # 1件失敗しても他は続けるが、最後に失敗扱いにする
                 failures += 1

@@ -2,11 +2,14 @@
 feeds:
   # AINOW（AI活用・ビジネス寄りの解説/ノウハウ記事）
   # tags は固定ハッシュタグ。空にすると記事内容に応じてAIが生成したタグのみが付く。
+  # weight は選ばれる頻度の重み。活用ノウハウ寄りのAINOWを多めにしてニュース偏重を防ぐ。
   - url: "https://ainow.ai/feed/"
     tags: []
+    weight: 2
   # ITmedia AI+（生成AIニュース全般）
   - url: "https://rss.itmedia.co.jp/rss/2.0/aiplus.xml"
     tags: []
+    weight: 1
 
 # 1回の実行で投稿する最大件数（レート制限・事故防止）
 max_posts_per_run: 1
